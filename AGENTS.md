@@ -37,7 +37,8 @@
 ## 按任务加载
 
 - 目录/包布局任务：读取 `docs/agent/layout.md`
-- 实现任务：读取 `docs/agent/workflow.md` 和 `docs/agent/testing.md`
+- 实现任务：读取 `docs/agent/workflow.md`、`docs/agent/roadmap.md` 和 `docs/agent/testing.md`
+- 阶段路线/进度任务：读取 `docs/agent/roadmap.md`
 - 测试任务：读取 `docs/agent/testing.md`
 - Git/提交任务：读取 `docs/agent/git.md`
 - 项目目标/范围任务：读取 `docs/agent/project.md`

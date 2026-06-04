@@ -16,6 +16,8 @@
 
 ## 推荐实现顺序
 
+详细阶段目标和审查重点见 `docs/agent/roadmap.md`。
+
 ```text
 1. internal/record/record.go
 2. internal/memtable/memtable.go

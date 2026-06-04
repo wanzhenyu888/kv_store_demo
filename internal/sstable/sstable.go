@@ -19,11 +19,7 @@ func Create(path string, records []record.Record) (*SSTable, error) {
 }
 
 func Open(id int, path string) (*SSTable, error) {
-	return &SSTable{
-		id:    id,
-		path:  path,
-		index: make(map[string]int64),
-	}, ErrNotImplemented
+	return nil, ErrNotImplemented
 }
 
 func (s *SSTable) Get(key []byte) (record.Record, bool, error) {

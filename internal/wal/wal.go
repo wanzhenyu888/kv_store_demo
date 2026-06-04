@@ -13,7 +13,7 @@ type WAL struct {
 }
 
 func Open(path string) (*WAL, error) {
-	return &WAL{path: path}, ErrNotImplemented
+	return nil, ErrNotImplemented
 }
 
 func (w *WAL) Append(record record.Record) error {
