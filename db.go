@@ -1,16 +1,31 @@
 package kv
 
-import "sync"
+import (
+	"log/slog"
+	"sync"
+
+	"kv_store_demo/internal/memtable"
+)
 
 type DB struct {
-	mu      sync.RWMutex
-	options Options
-	closed  bool
+	options      Options
+	Dir          string
+	MemTableSize int
+	memtable     *memtable.MemTable
+	mu           sync.RWMutex
+	Logger       *slog.Logger
+	closed       bool
 }
 
 func Open(options Options) (*DB, error) {
+	options = normalizeOptions(options)
+
 	return &DB{
-		options: normalizeOptions(options),
+		options:      options,
+		Dir:          options.Dir,
+		MemTableSize: options.MemTableSize,
+		memtable:     memtable.New(),
+		Logger:       options.Logger,
 	}, nil
 }
 

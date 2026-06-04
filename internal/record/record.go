@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+
+	"kv_store_demo/internal/kv_errors"
 )
 
 const (
@@ -28,16 +30,16 @@ type Record struct {
 func CheckEncodePara(record Record) error {
 	// 校验Type
 	if record.Type != TypePut && record.Type != TypeDelete {
-		return ErrInvalidType
+		return kv_errors.ErrInvalidType
 	} else if record.Type == TypeDelete && len(record.Value) != 0 {
-		return ErrUnexpectedValue
+		return kv_errors.ErrUnexpectedValue
 	}
 
 	// 校验Key和Value的长度
 	if len(record.Key) > math.MaxUint32 || len(record.Value) > math.MaxUint32 {
-		return ErrRecordTooLarge
+		return kv_errors.ErrRecordTooLarge
 	} else if len(record.Key) == 0 {
-		return ErrEmptyKey
+		return kv_errors.ErrEmptyKey
 	}
 
 	return nil
@@ -67,7 +69,7 @@ func Decode(r io.Reader) (Record, error) {
 	// 读取Record Header
 	headerBuf := make([]byte, RecordHeaderSize)
 	if _, err := io.ReadFull(r, headerBuf); err != nil {
-		return Record{}, ErrIncompleteRecord
+		return Record{}, kv_errors.ErrIncompleteRecord
 	}
 
 	// 解析Record Header
@@ -78,21 +80,21 @@ func Decode(r io.Reader) (Record, error) {
 	offset += RecordKeySize
 	valueSize := binary.BigEndian.Uint32(headerBuf[offset : offset+RecordValueSize])
 	if recordType != TypePut && recordType != TypeDelete {
-		return Record{}, ErrInvalidType
+		return Record{}, kv_errors.ErrInvalidType
 	} else if keySize == 0 {
-		return Record{}, ErrEmptyKey
+		return Record{}, kv_errors.ErrEmptyKey
 	}
 
 	// 读取Record Key
 	keyBuf := make([]byte, keySize)
 	if _, err := io.ReadFull(r, keyBuf); err != nil {
-		return Record{}, ErrIncompleteRecord
+		return Record{}, kv_errors.ErrIncompleteRecord
 	}
 
 	// 读取Record Value
 	valueBuf := make([]byte, valueSize)
 	if _, err := io.ReadFull(r, valueBuf); err != nil {
-		return Record{}, ErrIncompleteRecord
+		return Record{}, kv_errors.ErrIncompleteRecord
 	}
 
 	return Record{

@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"testing"
+
+	"kv_store_demo/internal/kv_errors"
 )
 
 func TestEncodeDecodePut(t *testing.T) {
@@ -96,21 +98,21 @@ func TestEncodeDecodeBinaryPayload(t *testing.T) {
 
 func TestEncodeRejectsInvalidType(t *testing.T) {
 	_, err := Encode(Record{Type: 99, Key: []byte("name"), Value: []byte("alice")})
-	if !errors.Is(err, ErrInvalidType) {
+	if !errors.Is(err, kv_errors.ErrInvalidType) {
 		t.Fatalf("Encode() error = %v, want ErrInvalidType", err)
 	}
 }
 
 func TestEncodeRejectsEmptyKey(t *testing.T) {
 	_, err := Encode(Record{Type: TypePut, Value: []byte("alice")})
-	if !errors.Is(err, ErrEmptyKey) {
+	if !errors.Is(err, kv_errors.ErrEmptyKey) {
 		t.Fatalf("Encode() error = %v, want ErrEmptyKey", err)
 	}
 }
 
 func TestEncodeRejectsDeleteWithValue(t *testing.T) {
 	_, err := Encode(Record{Type: TypeDelete, Key: []byte("name"), Value: []byte("alice")})
-	if !errors.Is(err, ErrUnexpectedValue) {
+	if !errors.Is(err, kv_errors.ErrUnexpectedValue) {
 		t.Fatalf("Encode() error = %v, want ErrUnexpectedValue", err)
 	}
 }
@@ -122,7 +124,7 @@ func TestDecodeRejectsInvalidType(t *testing.T) {
 	copy(data[RecordHeaderSize:], []byte("name"))
 
 	_, err := Decode(bytes.NewReader(data))
-	if !errors.Is(err, ErrInvalidType) {
+	if !errors.Is(err, kv_errors.ErrInvalidType) {
 		t.Fatalf("Decode() error = %v, want ErrInvalidType", err)
 	}
 }
@@ -132,14 +134,14 @@ func TestDecodeRejectsEmptyKey(t *testing.T) {
 	data[0] = TypePut
 
 	_, err := Decode(bytes.NewReader(data))
-	if !errors.Is(err, ErrEmptyKey) {
+	if !errors.Is(err, kv_errors.ErrEmptyKey) {
 		t.Fatalf("Decode() error = %v, want ErrEmptyKey", err)
 	}
 }
 
 func TestDecodeRejectsIncompleteHeader(t *testing.T) {
 	_, err := Decode(bytes.NewReader([]byte{TypePut}))
-	if !errors.Is(err, ErrIncompleteRecord) {
+	if !errors.Is(err, kv_errors.ErrIncompleteRecord) {
 		t.Fatalf("Decode() error = %v, want ErrIncompleteRecord", err)
 	}
 }
@@ -150,7 +152,7 @@ func TestDecodeRejectsIncompleteKey(t *testing.T) {
 	binary.BigEndian.PutUint32(data[1:5], 4)
 
 	_, err := Decode(bytes.NewReader(data))
-	if !errors.Is(err, ErrIncompleteRecord) {
+	if !errors.Is(err, kv_errors.ErrIncompleteRecord) {
 		t.Fatalf("Decode() error = %v, want ErrIncompleteRecord", err)
 	}
 }
@@ -163,7 +165,7 @@ func TestDecodeRejectsIncompleteValue(t *testing.T) {
 	copy(data[RecordHeaderSize:], []byte("name"))
 
 	_, err := Decode(bytes.NewReader(data))
-	if !errors.Is(err, ErrIncompleteRecord) {
+	if !errors.Is(err, kv_errors.ErrIncompleteRecord) {
 		t.Fatalf("Decode() error = %v, want ErrIncompleteRecord", err)
 	}
 }
