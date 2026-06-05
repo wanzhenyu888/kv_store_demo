@@ -68,7 +68,10 @@ func Encode(record Record) ([]byte, error) {
 func Decode(r io.Reader) (Record, error) {
 	// 读取Record Header
 	headerBuf := make([]byte, RecordHeaderSize)
-	if _, err := io.ReadFull(r, headerBuf); err != nil {
+	if n, err := io.ReadFull(r, headerBuf); err != nil {
+		if n == 0 {
+			return Record{}, io.EOF
+		}
 		return Record{}, kv_errors.ErrIncompleteRecord
 	}
 
