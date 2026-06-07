@@ -3,11 +3,11 @@ package wal
 import (
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"kv_store_demo/internal/kv_errors"
 	"kv_store_demo/internal/record"
+	"kv_store_demo/internal/utils"
 )
 
 type WAL struct {
@@ -18,20 +18,8 @@ type WAL struct {
 }
 
 func Open(path string) (*WAL, error) {
-	if path == "" {
-		return nil, kv_errors.ErrInvalidPara
-	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := utils.OpenFileWithFlagMode(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
-		return nil, err
-	}
-	if _, err := f.Seek(0, io.SeekEnd); err != nil {
-		_ = f.Close()
 		return nil, err
 	}
 
@@ -55,9 +43,6 @@ func (w *WAL) Append(rec record.Record) error {
 		return err
 	}
 
-	if _, err := w.file.Seek(0, io.SeekEnd); err != nil {
-		return err
-	}
 	n, err := w.file.Write(data)
 	if err != nil {
 		return err
