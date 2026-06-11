@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"kv_store_demo/internal/kv_errors"
+	"kv_store_demo/infra/kv_errors"
 )
 
 func TestEncodeDecodePut(t *testing.T) {

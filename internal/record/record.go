@@ -5,7 +5,7 @@ import (
 	"io"
 	"math"
 
-	"kv_store_demo/internal/kv_errors"
+	"kv_store_demo/infra/kv_errors"
 )
 
 const (

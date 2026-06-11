@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"kv_store_demo/internal/kv_errors"
+	"kv_store_demo/infra/kv_errors"
 	"kv_store_demo/internal/record"
 )
 

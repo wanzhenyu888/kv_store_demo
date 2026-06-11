@@ -1,16 +1,17 @@
 package kv
 
 import (
-	"io"
 	"log/slog"
+	"path/filepath"
 )
 
 const DefaultMemTableSize = 4 * 1024 * 1024
 
 type Options struct {
 	Dir          string
-	MemTableSize int
-	Logger	     *slog.Logger
+	sstDir       string
+	MemTableSize uint64
+	Logger       *slog.Logger
 }
 
 func normalizeOptions(options Options) Options {
@@ -18,9 +19,6 @@ func normalizeOptions(options Options) Options {
 		options.MemTableSize = DefaultMemTableSize
 	}
 
-	if options.Logger == nil {
-		options.Logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
-	}
-	
+	options.sstDir = filepath.Join(options.Dir, "./sst/")
 	return options
 }

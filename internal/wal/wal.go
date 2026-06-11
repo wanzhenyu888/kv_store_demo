@@ -5,9 +5,9 @@ import (
 	"os"
 	"sync"
 
-	"kv_store_demo/internal/kv_errors"
+	"kv_store_demo/infra"
+	"kv_store_demo/infra/kv_errors"
 	"kv_store_demo/internal/record"
-	"kv_store_demo/internal/utils"
 )
 
 type WAL struct {
@@ -18,7 +18,7 @@ type WAL struct {
 }
 
 func Open(path string) (*WAL, error) {
-	f, err := utils.OpenFileWithFlagMode(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	f, err := infra.OpenFileWithFlagMode(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
 	}

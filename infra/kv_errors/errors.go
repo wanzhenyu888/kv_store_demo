@@ -14,4 +14,5 @@ var (
 	ErrIncompleteRecord = errors.New("incomplete record")
 	ErrNilCallBack		= errors.New("callback should not be nil")
 	ErrFileClosed		= errors.New("file is closed")
+	ErrDbClosed			= errors.New("db is closed")
 )

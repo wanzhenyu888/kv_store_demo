@@ -3,7 +3,7 @@ package memtable
 import (
 	"slices"
 
-	"kv_store_demo/internal/kv_errors"
+	"kv_store_demo/infra/kv_errors"
 	"kv_store_demo/internal/record"
 )
 
@@ -99,4 +99,9 @@ func (m *MemTable) ForEachRecord(fn func(record.Record) error) error {
 		}
 	}
 	return nil
+}
+
+func (m *MemTable) Reset() {
+	m.size = 0
+	clear(m.records)
 }
