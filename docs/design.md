@@ -129,14 +129,14 @@ DB 是对外 API 和内部协调层。
 
 Compaction 用于合并多个 SSTable。
 
-第一版 Compaction 采用最小可理解策略：
+第一版 Compaction 采用单层全量合并策略：
 
 - 合并所有 SSTable
 - 新版本覆盖旧版本
 - tombstone 覆盖旧值
 - 最终不把 tombstone 写入新的 SSTable
 
-这个策略不是完整 RocksDB 的多层 Compaction，但足够表达 LSM Tree 整理历史数据的核心思想。
+当前实现借鉴 RocksDB 的流式归并思路：每个 SSTable 通过 iterator 顺序读取，使用小根堆按 key 归并，同 key 选择更新的 SSTable 记录。这个策略不是完整 RocksDB 的多层 Compaction，但足够表达 LSM Tree 整理历史数据的核心思想。
 
 ## 5. 数据流概览
 
@@ -173,17 +173,17 @@ SSTable 表示已经 Flush 到磁盘的数据，WAL 表示尚未 Flush 的最新
 ### 5.5 Compaction 路径
 
 ```text
-读取所有 SSTable -> 从新到旧合并 -> 写新 SSTable -> 删除旧 SSTable
+读取所有 SSTable iterator -> 堆归并同 key 版本 -> 写新 SSTable -> 删除旧 SSTable
 ```
 
 Compaction 后，旧版本数据会被清理，SSTable 数量会减少。
 
 ## 6. 文件和模块划分
 
-第一版计划文件：
+第一版主要文件：
 
 - `options.go`：配置项
-- `errors.go`：公共错误
+- `infra/kv_errors/errors.go`：公共错误
 - `db.go`：对外 API 和整体协调
 - `internal/record/record.go`：记录类型和编码/解码
 - `internal/memtable/memtable.go`：内存表
@@ -191,7 +191,7 @@ Compaction 后，旧版本数据会被清理，SSTable 数量会减少。
 - `internal/sstable/sstable.go`：有序不可变文件
 - `internal/compact/compact.go`：SSTable 合并
 - `test/db_test.go`：API 形状测试
-- `example/main.go`：API 使用示例
+- `example/simple_example.go`：API 使用示例
 
 ## 7. 实现顺序
 
@@ -204,7 +204,7 @@ Compaction 后，旧版本数据会被清理，SSTable 数量会减少。
 4. internal/sstable/sstable.go
 5. db.go
 6. internal/compact/compact.go
-7. example/main.go
+7. example/simple_example.go
 ```
 
 这个顺序先定义数据，再实现内存表，然后实现持久化和磁盘表，最后通过 DB API 串联完整流程。
@@ -248,7 +248,7 @@ go test ./...
 
 - MemTable 使用 `map`，而不是 SkipList
 - SSTable 启动时全量扫描建立内存索引
-- Compaction 合并所有 SSTable
+- Compaction 合并所有 SSTable，使用 iterator + 堆做流式归并
 - WAL 不加 checksum
 - 不做后台线程
 - 不做多层 Level

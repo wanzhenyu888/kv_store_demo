@@ -122,6 +122,61 @@ func TestForEachRecordOrdersByKey(t *testing.T) {
 	}
 }
 
+func TestIteratorReadsRecordsInFileOrder(t *testing.T) {
+	table := createTable(t, []record.Record{
+		{Type: record.TypePut, Key: []byte("a"), Value: []byte("1")},
+		{Type: record.TypeDelete, Key: []byte("b")},
+		{Type: record.TypePut, Key: []byte("c"), Value: []byte("3")},
+	})
+	defer table.Close()
+
+	it, err := table.NewIterator()
+	if err != nil {
+		t.Fatalf("NewIterator() error = %v", err)
+	}
+	defer it.Close()
+
+	var got []record.Record
+	for it.Valid() {
+		got = append(got, it.Record())
+		it.Next()
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("Iterator Err() = %v, want nil", err)
+	}
+
+	want := []record.Record{
+		{Type: record.TypePut, Key: []byte("a"), Value: []byte("1")},
+		{Type: record.TypeDelete, Key: []byte("b")},
+		{Type: record.TypePut, Key: []byte("c"), Value: []byte("3")},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("iterator read %d records, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if !sameRecord(got[i], want[i]) {
+			t.Fatalf("record[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestNewIteratorRejectsClosedTable(t *testing.T) {
+	table := createTable(t, []record.Record{
+		{Type: record.TypePut, Key: []byte("name"), Value: []byte("alice")},
+	})
+	if err := table.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	it, err := table.NewIterator()
+	if !errors.Is(err, kv_errors.ErrFileClosed) {
+		t.Fatalf("NewIterator() error = %v, want ErrFileClosed", err)
+	}
+	if it != nil {
+		t.Fatalf("NewIterator() iterator = %+v, want nil", it)
+	}
+}
+
 func TestOpenRejectsIncompleteRecord(t *testing.T) {
 	path := sstablePath(t)
 	if err := os.WriteFile(path, []byte{record.TypePut}, 0644); err != nil {

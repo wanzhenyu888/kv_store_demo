@@ -11,6 +11,7 @@ import (
 
 	"kv_store_demo/infra"
 	"kv_store_demo/infra/kv_errors"
+	"kv_store_demo/internal/compact"
 	"kv_store_demo/internal/memtable"
 	"kv_store_demo/internal/record"
 	"kv_store_demo/internal/sstable"
@@ -306,6 +307,68 @@ func (db *DB) Flush() error {
 }
 
 func (db *DB) Compact() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if db.closed {
+		return kv_errors.ErrDbClosed
+	}
+
+	if err := triggerFlush(db); err != nil {
+		return err
+	}
+	if len(db.Sstables) == 0 {
+		return nil
+	}
+
+	oldPaths := make([]string, 0, len(db.Sstables))
+	for _, sst := range db.Sstables {
+		oldPaths = append(oldPaths, sst.Path())
+	}
+
+	tmpPath := filepath.Join(db.sstDir, "compact.tmp")
+	finalPath := filepath.Join(db.sstDir, "0000.sst")
+	newSst, err := compact.Run(db.Sstables, tmpPath)
+	if err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	if newSst != nil {
+		if err := newSst.Close(); err != nil {
+			_ = os.Remove(tmpPath)
+			return err
+		}
+	}
+
+	for _, sst := range db.Sstables {
+		if err := sst.Close(); err != nil {
+			_ = os.Remove(tmpPath)
+			return err
+		}
+	}
+	for _, path := range oldPaths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			_ = os.Remove(tmpPath)
+			return err
+		}
+	}
+
+	if newSst == nil {
+		db.Sstables = nil
+		db.SstablesNum = 0
+		return nil
+	}
+
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		return err
+	}
+
+	reopenedSst, err := sstable.Open(0, finalPath)
+	if err != nil {
+		return err
+	}
+	db.Sstables = []*sstable.SSTable{reopenedSst}
+	db.SstablesNum = 1
 	return nil
 }
 

@@ -20,7 +20,7 @@
 
 ## 功能特性
 
-计划第一版支持：
+第一版已经支持：
 
 - `Put` 写入 key/value
 - `Get` 读取 key/value
@@ -32,6 +32,17 @@
 - 手动 Compaction
 - Open 后恢复数据
 - 通过 `example` 展示 API 使用
+
+## V1.0 版本
+
+`v1.0` 是本项目的第一个完整学习版，实现了单机 LSM Tree KV 存储引擎的主干流程：
+
+- 写入路径：`Put` / `Delete` 先写 WAL，再更新 MemTable。
+- 读取路径：`Get` 按 MemTable、最新 SSTable 到旧 SSTable 的顺序查找。
+- 持久化路径：MemTable 可手动或自动 Flush 为有序 SSTable，并在 Flush 后 reset WAL。
+- 恢复路径：`Open` 加载已有 SSTable，并 replay WAL 恢复未 Flush 的数据。
+- 整理路径：`Compact` 合并所有 SSTable，保留同 key 最新版本并清理 tombstone。
+- 示例路径：`go run ./example` 展示写入、读取、删除、Flush、重启恢复和 Compaction。
 
 ## 非目标
 
@@ -62,17 +73,21 @@ flowchart TD
 
 ## 快速开始
 
-当前项目处于骨架阶段，可以先运行测试确认模块接口可编译。
+运行测试确认当前实现：
 
 ```bash
 go test ./...
 ```
 
-第一版实现完成后，会通过 `example` 目录提供 API 使用示例。
+运行完整 API 示例：
+
+```bash
+go run ./example
+```
 
 ## API 示例片段
 
-下面是 API 使用片段，用于展示第一版完成后的调用方式。完整可运行示例会在实现完成后放到 `example/main.go`。
+下面是 API 使用片段。完整可运行示例见 `example/simple_example.go`。
 
 ```go
 import kv "kv_store_demo"
@@ -98,13 +113,13 @@ if err != nil {
 
 ## 项目结构
 
-计划中的第一版结构：
+当前第一版结构：
 
 ```text
 .
 ├── db.go              # 对外 API 和整体协调
 ├── options.go         # 配置项
-├── errors.go          # 公共错误
+├── infra/             # 日志、文件工具和公共错误
 ├── internal/
 │   ├── record/        # 记录类型和编码
 │   ├── memtable/      # 内存表
@@ -115,7 +130,8 @@ if err != nil {
 │   └── db_test.go     # API 形状测试
 ├── docs/
 │   └── design.md  # 设计文档
-└── example/        # 实现完成后放置 API 使用示例
+└── example/
+    └── simple_example.go # API 使用示例
 ```
 
 ## 学习路线
@@ -129,7 +145,7 @@ if err != nil {
 4. internal/sstable/sstable.go
 5. db.go
 6. internal/compact/compact.go
-7. example/main.go（实现完成后创建）
+7. example/simple_example.go
 ```
 
 ## 设计简化
@@ -139,7 +155,7 @@ if err != nil {
 - MemTable 使用 `map`，而不是 SkipList
 - Flush 时对 key 排序后写入 SSTable
 - SSTable 启动时扫描文件建立内存索引
-- Compaction 合并所有 SSTable，而不是实现多层 Level
+- Compaction 合并所有 SSTable，使用 iterator + 堆做流式归并，而不是实现多层 Level
 - WAL 不实现 checksum
 - 不引入后台线程
 

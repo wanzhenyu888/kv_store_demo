@@ -5,18 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 项目快照
 
 - **Go 单机 KV 存储引擎学习 Demo**,基于 LSM Tree 主干流程(WAL → MemTable → SSTable → Compaction)。
-- **当前处于骨架阶段**:`Put` / `Get` / `Delete` / `Flush` / `Compact` 等业务方法均返回 `ErrNotImplemented`,仅 `Open` / `Close` / `ensureOpen` 是可用的。
-- 这是一个**库**,不是服务:没有 `main` 包,没有 `cmd/` 目录,没有网络层。`example/main.go` 在 API 真正可运行后再创建。
-- 零第三方依赖(`go.mod` 没有 `require` 块),Go 1.22。
+- **第一版主流程已实现**:支持 `Open` / `Put` / `Get` / `Delete` / `Flush` / `Compact` / `Close`,包含 WAL、MemTable、SSTable、恢复和手动 Compaction。
+- 这是一个**库**,不是服务:没有 `cmd/` 目录,没有网络层。`example/simple_example.go` 是可运行 API 示例。
+- Go 1.22。`go.mod` 当前包含示例日志轮转依赖 `gopkg.in/natefinch/lumberjack.v2`。
 
 ## 常用命令
 
 ```bash
 go build ./...                                   # 编译全部包
 go test ./...                                    # 跑全部测试(每次改完必跑)
+go run ./example                                 # 运行完整 API 示例
 go test ./internal/record/...                    # 跑单个包
-go test -run TestClosedDBReturnsErrClosed ./test/   # 跑单个测试
-go test -v -run TestClosedDBReturnsErrClosed ./test/ # 单个测试 + 详细输出
+go test -run TestCompactFlushesMemTableAndKeepsLatestValues ./test/   # 跑单个测试
+go test -v -run TestCompactFlushesMemTableAndKeepsLatestValues ./test/ # 单个测试 + 详细输出
 go test ./test/...                               # 跑外部 API / 集成测试
 ```
 
@@ -24,7 +25,7 @@ go test ./test/...                               # 跑外部 API / 集成测试
 
 ## 目录结构
 
-- 根目录 `package kv` 是**对外 API**(`db.go` / `options.go` / `errors.go`)。使用者这样导入:
+- 根目录 `package kv` 是**对外 API**(`db.go` / `options.go`)。使用者这样导入:
 
   ```go
   import kv "kv_store_demo"
@@ -36,7 +37,7 @@ go test ./test/...                               # 跑外部 API / 集成测试
 
 - 单元测试**跟随包放置**:`internal/<pkg>/<pkg>_test.go`,不要放到 `test/`。
 
-- `example/` 等 API 真正能跑起来后再创建,不要预先创建空目录。
+- `example/simple_example.go` 是当前可运行示例,覆盖 Open、Put、Get、Delete、Flush、Close、重启恢复和 Compact。
 
 - `.vscode/settings.json` 是本地编辑器配置,已被 `.gitignore` 忽略,不要提交。
 
@@ -50,7 +51,7 @@ go test ./test/...                               # 跑外部 API / 集成测试
 4. **测试放对位置**:
    - 单元测试 → `internal/<pkg>/<pkg>_test.go`
    - 外部 API / 集成测试 → `test/`
-   - 骨架阶段的 `ErrNotImplemented` 占位测试是临时的,真实实现后必须替换为行为测试。
+   - 第一版真实实现后不要新增长期 `ErrNotImplemented` 占位测试,新增能力应优先补行为测试。
 5. **Git 卫生**(详见 `docs/agent/git.md`):
    - **不要**自动 commit / push,除非用户明确要求。
    - **不要**改动与当前任务无关的文件。
@@ -75,17 +76,18 @@ go test ./test/...                               # 跑外部 API / 集成测试
 
 与 `README.md` / `docs/design.md` §7 一致:
 
-1. `internal/record/record.go` — **下一步该填的就是这个**。`Encode` / `Decode` 的格式未定,其他所有模块都依赖这条契约,先把这里定下来。
+1. `internal/record/record.go`
 2. `internal/memtable/memtable.go`
 3. `internal/wal/wal.go`
 4. `internal/sstable/sstable.go`
 5. `db.go` — 串联 WAL / MemTable / SSTable 的协调层。
 6. `internal/compact/compact.go`
-7. `example/main.go` — 仅在 API 跑通后创建。
+7. `example/simple_example.go`
 
 ## 起步 checklist(新会话建议)
 
 1. 读 `README.md` → `AGENTS.md` → `docs/design.md`。
 2. 按需读 `docs/agent/*` 对应子文档(布局 / 工作流 / 测试 / Git)。
 3. 跑一次 `go test ./...` 确认基线绿。
-4. 从 `internal/record/record.go` 开始,按上面实现顺序,一次只做一个模块。
+4. 如涉及示例或完整流程,跑 `go run ./example`。
+5. 后续扩展按模块推进:先说明设计、伪代码和测试点,再修改代码。

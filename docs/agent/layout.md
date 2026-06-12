@@ -28,7 +28,10 @@ import kv "kv_store_demo"
 
 - `db.go`
 - `options.go`
-- `errors.go`
+
+公共错误定义放在：
+
+- `infra/kv_errors/errors.go`
 
 ## 内部实现
 
@@ -51,6 +54,6 @@ Go 会阻止项目外部代码导入 `internal/*`，因此这些目录适合放�
 
 ## example 和 test
 
-- `example/`：等真实 API 可运行后创建，放 API 使用示例。
+- `example/simple_example.go`：当前可运行 API 示例，支持 `go run ./example`。
 - `test/`：只放外部 API / 集成测试。
 - 模块单元测试放在对应包目录下，例如 `internal/record/record_test.go`。

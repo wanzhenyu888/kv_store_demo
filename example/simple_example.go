@@ -92,6 +92,12 @@ func mustFlush(db *kv.DB) {
 	}
 }
 
+func mustCompact(db *kv.DB) {
+	if err := db.Compact(); err != nil {
+		log.Fatalf("compact: %v", err)
+	}
+}
+
 func mustClose(db *kv.DB) {
 	if err := db.Close(); err != nil {
 		log.Fatalf("close db: %v", err)
@@ -208,6 +214,23 @@ func main() {
 	fmt.Printf("stage 7: reopened database, sstable files=%d\n", countSSTables())
 
 	verifySamples(db)
+	fmt.Println("stage 8: verified sample reads after reopen")
+
+	beforeCompact := countSSTables()
+	mustCompact(db)
+	afterCompact := countSSTables()
+	fmt.Printf("stage 9: compacted sstables, before=%d after=%d\n", beforeCompact, afterCompact)
+
+	verifySamples(db)
+	fmt.Println("stage 10: verified sample reads after compact")
+
+	mustClose(db)
+	fmt.Println("stage 11: closed database after compact")
+
+	db = mustOpen(logger)
+	defer db.Close()
+	fmt.Printf("stage 12: reopened compacted database, sstable files=%d\n", countSSTables())
+
+	verifySamples(db)
 	fmt.Println("verification succeeded")
-	fmt.Println("compaction is not included in this example yet")
 }

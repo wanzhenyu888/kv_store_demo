@@ -23,6 +23,14 @@ type SSTableWriter struct {
 	closed bool
 }
 
+type Iterator struct {
+	file   *os.File
+	cur    record.Record
+	valid  bool
+	err    error
+	closed bool
+}
+
 func CreateSSTableWriter(path string) (*SSTableWriter, error) {
 	f, err := infra.OpenFileWithFlagMode(path, os.O_CREATE|os.O_TRUNC|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
@@ -157,6 +165,77 @@ func (s *SSTable) ForEachRecord(fn func(record.Record) error) error {
 		}
 	}
 	return nil
+}
+
+func (s *SSTable) Path() string {
+	return s.path
+}
+
+func (s *SSTable) NewIterator() (*Iterator, error) {
+	if s.closed {
+		return nil, kv_errors.ErrFileClosed
+	}
+
+	f, err := os.Open(s.path)
+	if err != nil {
+		return nil, err
+	}
+
+	it := &Iterator{
+		file: f,
+	}
+	it.Next()
+	return it, nil
+}
+
+func (it *Iterator) Valid() bool {
+	return it != nil && !it.closed && it.err == nil && it.valid
+}
+
+func (it *Iterator) Record() record.Record {
+	if it == nil {
+		return record.Record{}
+	}
+	return it.cur
+}
+
+func (it *Iterator) Next() {
+	if it == nil || it.closed || it.err != nil {
+		return
+	}
+
+	rec, err := record.Decode(it.file)
+	if err == io.EOF {
+		it.valid = false
+		return
+	}
+	if err != nil {
+		it.err = err
+		it.valid = false
+		return
+	}
+
+	it.cur = rec
+	it.valid = true
+}
+
+func (it *Iterator) Err() error {
+	if it == nil {
+		return nil
+	}
+	return it.err
+}
+
+func (it *Iterator) Close() error {
+	if it == nil || it.closed {
+		return nil
+	}
+
+	err := it.file.Close()
+	it.file = nil
+	it.valid = false
+	it.closed = true
+	return err
 }
 
 func (s *SSTable) Close() error {

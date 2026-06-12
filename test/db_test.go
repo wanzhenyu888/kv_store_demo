@@ -285,6 +285,68 @@ func TestTombstoneInNewerSSTableHidesOlderValue(t *testing.T) {
 	assertMissing(t, db, "name")
 }
 
+func TestCompactFlushesMemTableAndKeepsLatestValues(t *testing.T) {
+	dir := t.TempDir()
+	db := openDB(t, dir, kv.DefaultMemTableSize)
+
+	mustPut(t, db, "name", "alice")
+	mustFlush(t, db)
+	mustPut(t, db, "name", "bob")
+	mustPut(t, db, "city", "shanghai")
+
+	if err := db.Compact(); err != nil {
+		t.Fatalf("Compact() error = %v", err)
+	}
+	assertGet(t, db, "name", "bob")
+	assertGet(t, db, "city", "shanghai")
+	if got := countSSTables(t, dir); got != 1 {
+		t.Fatalf("sstable count after Compact = %d, want 1", got)
+	}
+
+	mustClose(t, db)
+	db = openDB(t, dir, kv.DefaultMemTableSize)
+	defer db.Close()
+	assertGet(t, db, "name", "bob")
+	assertGet(t, db, "city", "shanghai")
+}
+
+func TestCompactDropsDeletedKeysAndOldVersions(t *testing.T) {
+	dir := t.TempDir()
+	db := openDB(t, dir, kv.DefaultMemTableSize)
+
+	mustPut(t, db, "name", "alice")
+	mustFlush(t, db)
+	mustPut(t, db, "name", "bob")
+	mustFlush(t, db)
+	mustDelete(t, db, "name")
+	mustFlush(t, db)
+
+	if err := db.Compact(); err != nil {
+		t.Fatalf("Compact() error = %v", err)
+	}
+	assertMissing(t, db, "name")
+	if got := countSSTables(t, dir); got != 0 {
+		t.Fatalf("sstable count after compacting deleted key = %d, want 0", got)
+	}
+
+	mustClose(t, db)
+	db = openDB(t, dir, kv.DefaultMemTableSize)
+	defer db.Close()
+	assertMissing(t, db, "name")
+	if got := countSSTables(t, dir); got != 0 {
+		t.Fatalf("sstable count after reopen = %d, want 0", got)
+	}
+}
+
+func TestCompactRejectsClosedDB(t *testing.T) {
+	db := openDB(t, t.TempDir(), kv.DefaultMemTableSize)
+	mustClose(t, db)
+
+	if err := db.Compact(); !errors.Is(err, kv_errors.ErrDbClosed) {
+		t.Fatalf("Compact() after Close error = %v, want ErrDbClosed", err)
+	}
+}
+
 func TestAutoFlushOnPut(t *testing.T) {
 	dir := t.TempDir()
 	db := openDB(t, dir, 1)

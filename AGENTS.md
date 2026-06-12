@@ -17,7 +17,10 @@
 .
 ├── db.go
 ├── options.go
-├── errors.go
+├── infra/
+│   ├── log.go
+│   ├── utils.go
+│   └── kv_errors/
 ├── internal/
 │   ├── record/
 │   ├── memtable/
@@ -29,10 +32,11 @@
 │   ├── design.md
 │   └── agent/
 ├── example/
+│   └── simple_example.go
 └── AGENTS.md
 ```
 
-`example/` 当前可以不存在，等真实 API 可运行后再创建。
+`example/simple_example.go` 是当前可运行示例，覆盖 Open、Put、Get、Delete、Flush、Close、重启恢复和 Compact。
 
 ## 按任务加载
 
@@ -49,4 +53,4 @@
 - 根目录 `package kv` 是对外 API。
 - `internal/*` 是内部实现模块。
 - 不在代码或文档导入示例中使用 `github.com/wanzhenyu888/kv_store_demo`。
-- 不一次性生成完整引擎；每个模块先讲设计、伪代码和测试点，再实现。
+- 第一版主流程已实现；后续扩展仍按模块先讲设计、伪代码和测试点，再实现。

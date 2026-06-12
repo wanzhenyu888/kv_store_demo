@@ -25,7 +25,7 @@
 4. internal/sstable/sstable.go
 5. db.go
 6. internal/compact/compact.go
-7. example/main.go
+7. example/simple_example.go
 ```
 
 ## 文档协作
