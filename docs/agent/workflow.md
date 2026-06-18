@@ -2,7 +2,7 @@
 
 ## 基本节奏
 
-本项目是学习型 Demo，工作节奏要慢而清楚。实现每个模块前，先输出设计说明，不要直接写代码。
+本项目是学习型 Demo，工作节奏要慢而清楚。实现每个模块前，先输出设计说明，不要直接写代码。v2 分布式阶段尤其要先讲清楚网络接口、复制语义、路由规则和测试点。
 
 每个模块实现前应说明：
 
@@ -16,22 +16,18 @@
 
 ## 推荐实现顺序
 
-详细阶段目标和审查重点见 `docs/agent/roadmap.md`。
+阶段索引见 `docs/agent/roadmap.md`。
 
-```text
-1. internal/record/record.go
-2. internal/memtable/memtable.go
-3. internal/wal/wal.go
-4. internal/sstable/sstable.go
-5. db.go
-6. internal/compact/compact.go
-7. example/simple_example.go
-```
+具体设计以对应设计文档为准：
+
+- v1 单机引擎：`docs/design.md`
+- v2 分布式演进：`docs/distributed.md`
 
 ## 文档协作
 
 - README 只作为入口文档，不展开接口内部实现。
-- 详细设计放在 `docs/design.md`。
+- 单机引擎详细设计放在 `docs/design.md`。
+- 分布式演进详细设计放在 `docs/distributed.md`。
 - Agent 协作规范放在 `AGENTS.md` 和 `docs/agent/`。
 
 ## 每轮结束

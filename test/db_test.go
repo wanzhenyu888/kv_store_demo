@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	kv "kv_store_demo"
-	"kv_store_demo/infra/kv_errors"
 )
 
 func openDB(t *testing.T, dir string, memTableSize uint64) *kv.DB {
@@ -132,13 +131,13 @@ func TestPutGetDeleteRejectEmptyKey(t *testing.T) {
 	db := openDB(t, t.TempDir(), kv.DefaultMemTableSize)
 	defer db.Close()
 
-	if err := db.Put(nil, []byte("alice")); !errors.Is(err, kv_errors.ErrEmptyKey) {
+	if err := db.Put(nil, []byte("alice")); !errors.Is(err, kv.ErrEmptyKey) {
 		t.Fatalf("Put(nil) error = %v, want ErrEmptyKey", err)
 	}
-	if _, err := db.Get(nil); !errors.Is(err, kv_errors.ErrEmptyKey) {
+	if _, err := db.Get(nil); !errors.Is(err, kv.ErrEmptyKey) {
 		t.Fatalf("Get(nil) error = %v, want ErrEmptyKey", err)
 	}
-	if err := db.Delete(nil); !errors.Is(err, kv_errors.ErrEmptyKey) {
+	if err := db.Delete(nil); !errors.Is(err, kv.ErrEmptyKey) {
 		t.Fatalf("Delete(nil) error = %v, want ErrEmptyKey", err)
 	}
 }
@@ -342,9 +341,51 @@ func TestCompactRejectsClosedDB(t *testing.T) {
 	db := openDB(t, t.TempDir(), kv.DefaultMemTableSize)
 	mustClose(t, db)
 
-	if err := db.Compact(); !errors.Is(err, kv_errors.ErrDbClosed) {
+	if err := db.Compact(); !errors.Is(err, kv.ErrDbClosed) {
 		t.Fatalf("Compact() after Close error = %v, want ErrDbClosed", err)
 	}
+}
+
+func TestDBCreateAndRestoreSnapshot(t *testing.T) {
+	sourceDir := t.TempDir()
+	source := openDB(t, sourceDir, kv.DefaultMemTableSize)
+	defer source.Close()
+
+	mustPut(t, source, "name", "alice")
+	mustPut(t, source, "city", "paris")
+	mustDelete(t, source, "city")
+
+	var snapshot bytes.Buffer
+	if err := source.CreateSnapshot(&snapshot); err != nil {
+		t.Fatalf("CreateSnapshot() error = %v", err)
+	}
+	if snapshot.Len() == 0 {
+		t.Fatal("CreateSnapshot() wrote empty snapshot")
+	}
+
+	targetDir := t.TempDir()
+	target := openDB(t, targetDir, kv.DefaultMemTableSize)
+	defer target.Close()
+	mustPut(t, target, "stale", "value")
+
+	if err := target.RestoreSnapshot(bytes.NewReader(snapshot.Bytes())); err != nil {
+		t.Fatalf("RestoreSnapshot() error = %v", err)
+	}
+
+	assertGet(t, target, "name", "alice")
+	assertMissing(t, target, "city")
+	assertMissing(t, target, "stale")
+
+	info, err := os.Stat(filepath.Join(targetDir, "wal.log"))
+	if err != nil {
+		t.Fatalf("Stat(wal.log) error = %v", err)
+	}
+	if info.Size() != 0 {
+		t.Fatalf("restored wal.log size = %d, want 0", info.Size())
+	}
+
+	mustPut(t, target, "after", "restore")
+	assertGet(t, target, "after", "restore")
 }
 
 func TestAutoFlushOnPut(t *testing.T) {
@@ -375,16 +416,16 @@ func TestCloseRejectsOperations(t *testing.T) {
 	db := openDB(t, t.TempDir(), kv.DefaultMemTableSize)
 	mustClose(t, db)
 
-	if err := db.Put([]byte("name"), []byte("alice")); !errors.Is(err, kv_errors.ErrDbClosed) {
+	if err := db.Put([]byte("name"), []byte("alice")); !errors.Is(err, kv.ErrDbClosed) {
 		t.Fatalf("Put() after Close error = %v, want ErrDbClosed", err)
 	}
-	if _, err := db.Get([]byte("name")); !errors.Is(err, kv_errors.ErrDbClosed) {
+	if _, err := db.Get([]byte("name")); !errors.Is(err, kv.ErrDbClosed) {
 		t.Fatalf("Get() after Close error = %v, want ErrDbClosed", err)
 	}
-	if err := db.Delete([]byte("name")); !errors.Is(err, kv_errors.ErrDbClosed) {
+	if err := db.Delete([]byte("name")); !errors.Is(err, kv.ErrDbClosed) {
 		t.Fatalf("Delete() after Close error = %v, want ErrDbClosed", err)
 	}
-	if err := db.Flush(); !errors.Is(err, kv_errors.ErrDbClosed) {
+	if err := db.Flush(); !errors.Is(err, kv.ErrDbClosed) {
 		t.Fatalf("Flush() after Close error = %v, want ErrDbClosed", err)
 	}
 	if err := db.Close(); err != nil {

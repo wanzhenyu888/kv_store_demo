@@ -4,11 +4,11 @@
 
 模块单元测试跟随对应包放置：
 
-- `internal/record/record_test.go`
-- `internal/memtable/memtable_test.go`
-- `internal/wal/wal_test.go`
-- `internal/sstable/sstable_test.go`
-- `internal/compact/compact_test.go`
+- `internal/engine/record/record_test.go`
+- `internal/engine/memtable/memtable_test.go`
+- `internal/engine/wal/wal_test.go`
+- `internal/engine/sstable/sstable_test.go`
+- `internal/engine/compact/compact_test.go`
 
 外部 API / 集成测试放在：
 
@@ -26,16 +26,12 @@ go test ./...
 
 ## 测试重点
 
-第一版测试已覆盖以下重点，后续改动应继续保持：
+测试重点不要在本文重复维护：
 
-- Record 编码/解码
-- MemTable `Put` / `Get` / `Delete`
-- WAL replay
-- SSTable 查询
-- DB Flush 和恢复
-- tombstone 覆盖旧值
-- Compaction 清理旧版本
-- example 可运行
+- v1 单机引擎测试重点见 `docs/design.md`。
+- v2 分布式阶段测试重点见 `docs/distributed.md`。
+
+本文只约束测试放置和执行方式。
 
 ## 占位测试
 

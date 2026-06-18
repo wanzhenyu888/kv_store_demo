@@ -1,7 +1,9 @@
 package kv
 
 import (
+	"archive/tar"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,13 +11,13 @@ import (
 	"strings"
 	"sync"
 
-	"kv_store_demo/infra"
-	"kv_store_demo/infra/kv_errors"
-	"kv_store_demo/internal/compact"
-	"kv_store_demo/internal/memtable"
-	"kv_store_demo/internal/record"
-	"kv_store_demo/internal/sstable"
-	"kv_store_demo/internal/wal"
+	"kv_store_demo/internal/engine/compact"
+	"kv_store_demo/internal/engine/memtable"
+	"kv_store_demo/internal/engine/record"
+	"kv_store_demo/internal/engine/sstable"
+	"kv_store_demo/internal/engine/wal"
+	"kv_store_demo/internal/platform"
+	"kv_store_demo/internal/platform/kv_errors"
 )
 
 type DB struct {
@@ -36,12 +38,12 @@ type DB struct {
 
 func loadSstables(dir string) ([]*sstable.SSTable, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		infra.Logger.Error("Mkdir failed", "dir", dir, "err", err)
+		platform.Logger.Error("Mkdir failed", "dir", dir, "err", err)
 		return nil, err
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		infra.Logger.Error("Read dir failed", "dir", dir, "err", err)
+		platform.Logger.Error("Read dir failed", "dir", dir, "err", err)
 		return nil, err
 	}
 
@@ -57,7 +59,7 @@ func loadSstables(dir string) ([]*sstable.SSTable, error) {
 			id, _ := strconv.Atoi(nameWithOutExt)
 			sstable, err := sstable.Open(id, path)
 			if err != nil {
-				infra.Logger.Error("Open sstable failed", "id", id, "path", path, "err", err)
+				platform.Logger.Error("Open sstable failed", "id", id, "path", path, "err", err)
 				return nil, err
 			}
 			sstables = append(sstables, sstable)
@@ -78,18 +80,18 @@ func closeSstables(sstables []*sstable.SSTable) error {
 
 func Open(options Options) (*DB, error) {
 	// 检查并创建目录
-	if err := infra.CreateDir(options.Dir); err != nil {
-		infra.Logger.Error("infra.CreateDir failed", "dir", options.Dir, "err", err)
+	if err := platform.CreateDir(options.Dir); err != nil {
+		platform.Logger.Error("platform.CreateDir failed", "dir", options.Dir, "err", err)
 	}
 
 	// 基础初始化
 	options = normalizeOptions(options)
-	infra.InitLogger(options.Logger)
+	platform.InitLogger(options.Logger)
 
 	// 加载已有的SSTable
 	sstables, err := loadSstables(options.sstDir)
 	if err != nil {
-		infra.Logger.Error("Open DB failed", slog.Any("err", err))
+		platform.Logger.Error("Open DB failed", slog.Any("err", err))
 		return nil, err
 	}
 
@@ -98,7 +100,7 @@ func Open(options Options) (*DB, error) {
 	walIns, err := wal.Open(walFilePath)
 	if err != nil {
 		closeSstables(sstables)
-		infra.Logger.Error("Open Wal failed", "wal path", walFilePath, "err", err)
+		platform.Logger.Error("Open Wal failed", "wal path", walFilePath, "err", err)
 		return nil, err
 	}
 
@@ -114,12 +116,12 @@ func Open(options Options) (*DB, error) {
 	})
 	if err != nil {
 		closeSstables(sstables)
-		infra.Logger.Error("Wal Replay failed", "err", err)
+		platform.Logger.Error("Wal Replay failed", "err", err)
 		return nil, err
 	}
 
 	// 返回DB实例
-	infra.Logger.Info("Open DB succeeded")
+	platform.Logger.Info("Open DB succeeded")
 	return &DB{
 		options:      options,
 		Dir:          options.Dir,
@@ -134,7 +136,7 @@ func Open(options Options) (*DB, error) {
 
 func triggerFlush(db *DB) error {
 	if db.Memtable.Size() == 0 {
-		infra.Logger.Debug("memtable is nil")
+		platform.Logger.Debug("memtable is nil")
 		return nil
 	}
 
@@ -142,37 +144,37 @@ func triggerFlush(db *DB) error {
 	newSstPath := filepath.Join(db.sstDir, fmt.Sprintf("%04d.sst", newSstId))
 	sstWriter, err := sstable.CreateSSTableWriter(newSstPath)
 	if err != nil {
-		infra.Logger.Error("Create new sst writer failed", "newSstPath", newSstPath, "err", err)
+		platform.Logger.Error("Create new sst writer failed", "newSstPath", newSstPath, "err", err)
 		return err
 	}
 
 	err = db.Memtable.ForEachRecord(func(rec record.Record) error {
 		if err = sstWriter.Append(rec); err != nil {
-			infra.Logger.Error("Append to sst failed", "newSstPath", newSstPath, "err", err)
+			platform.Logger.Error("Append to sst failed", "newSstPath", newSstPath, "err", err)
 			return err
 		}
 		return nil
 	})
 	if err != nil {
-		infra.Logger.Error("Flush memtable to sst failed", "newSstPath", newSstPath, "err", err)
+		platform.Logger.Error("Flush memtable to sst failed", "newSstPath", newSstPath, "err", err)
 		return err
 	}
 
 	if err := sstWriter.Close(); err != nil {
-		infra.Logger.Error("Close sst writer failed", "newSstPath", newSstPath, "err", err)
+		platform.Logger.Error("Close sst writer failed", "newSstPath", newSstPath, "err", err)
 		return err
 	}
 
 	sst, err := sstable.Open(newSstId, newSstPath)
 	if err != nil {
-		infra.Logger.Error("Open sstable failed", "newSstPath", newSstPath, "err", err)
+		platform.Logger.Error("Open sstable failed", "newSstPath", newSstPath, "err", err)
 		return err
 	}
 	db.Sstables = append(db.Sstables, sst)
 	db.SstablesNum++
 
 	if err := db.Wal.Reset(); err != nil {
-		infra.Logger.Error("Reset wal file failed", "newSstPath", newSstPath, "err", err)
+		platform.Logger.Error("Reset wal file failed", "newSstPath", newSstPath, "err", err)
 		return err
 	}
 
@@ -202,13 +204,13 @@ func (db *DB) Put(key, value []byte) error {
 
 	// 写入WAL日志
 	if err := db.Wal.Append(rec); err != nil {
-		infra.Logger.Error("append one record to wal failed", "err", err)
+		platform.Logger.Error("append one record to wal failed", "err", err)
 		return err
 	}
 
 	// 写入Memtable
 	if err := db.Memtable.Put(key, value); err != nil {
-		infra.Logger.Error("Put one record to memtable failed", "err", err)
+		platform.Logger.Error("Put one record to memtable failed", "err", err)
 		return err
 	}
 
@@ -235,7 +237,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 
 	// 从memtable中搜索
 	if rec, ok := db.Memtable.Get(key); ok == true {
-		infra.Logger.Debug("Get rec from memtable succeeded", "key", key)
+		platform.Logger.Debug("Get rec from memtable succeeded", "key", key)
 		return rec.Value, nil
 	}
 
@@ -244,11 +246,11 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		sst := db.Sstables[i]
 		rec, ok, err := sst.Get(key)
 		if err != nil {
-			infra.Logger.Error("Get rec from sstable succeeded", "key", key, "sst id", i)
+			platform.Logger.Error("Get rec from sstable succeeded", "key", key, "sst id", i)
 			return nil, err
 		}
 		if ok {
-			infra.Logger.Debug("Get rec from sstable succeeded", "key", key, "sst id", i)
+			platform.Logger.Debug("Get rec from sstable succeeded", "key", key, "sst id", i)
 			return rec.Value, nil
 		}
 	}
@@ -278,13 +280,13 @@ func (db *DB) Delete(key []byte) error {
 
 	// 写入WAL日志
 	if err := db.Wal.Append(rec); err != nil {
-		infra.Logger.Error("append one record to wal failed", "rec", rec, "err", err)
+		platform.Logger.Error("append one record to wal failed", "rec", rec, "err", err)
 		return err
 	}
 
 	// 写入Memtable
 	if err := db.Memtable.Delete(key); err != nil {
-		infra.Logger.Error("Put one record to memtable failed", "rec", rec, "err", err)
+		platform.Logger.Error("Put one record to memtable failed", "rec", rec, "err", err)
 		return err
 	}
 
@@ -372,6 +374,151 @@ func (db *DB) Compact() error {
 	return nil
 }
 
+func (db *DB) CreateSnapshot(w io.Writer) error {
+	if w == nil {
+		return kv_errors.ErrInvalidPara
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if db.closed {
+		return kv_errors.ErrDbClosed
+	}
+
+	if err := triggerFlush(db); err != nil {
+		return err
+	}
+
+	tw := tar.NewWriter(w)
+	for _, sst := range db.Sstables {
+		if err := writeSnapshotSSTable(tw, sst.Path()); err != nil {
+			_ = tw.Close()
+			return err
+		}
+	}
+	return tw.Close()
+}
+
+func writeSnapshotSSTable(tw *tar.Writer, path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return nil
+	}
+
+	name := filepath.Base(path)
+	if filepath.Ext(name) != ".sst" {
+		return nil
+	}
+
+	if err := tw.WriteHeader(&tar.Header{
+		Name: name,
+		Mode: 0644,
+		Size: info.Size(),
+	}); err != nil {
+		return err
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(tw, f)
+	return err
+}
+
+func (db *DB) RestoreSnapshot(r io.Reader) error {
+	if r == nil {
+		return kv_errors.ErrInvalidPara
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if db.closed {
+		return kv_errors.ErrDbClosed
+	}
+
+	if err := closeSstables(db.Sstables); err != nil {
+		return err
+	}
+	db.Sstables = nil
+	db.SstablesNum = 0
+
+	if err := db.Wal.Close(); err != nil {
+		return err
+	}
+
+	if err := os.RemoveAll(db.sstDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(db.sstDir, 0755); err != nil {
+		return err
+	}
+	if err := restoreSnapshotSSTables(r, db.sstDir); err != nil {
+		return err
+	}
+
+	walPath := filepath.Join(db.Dir, "wal.log")
+	if err := os.Remove(walPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	walIns, err := wal.Open(walPath)
+	if err != nil {
+		return err
+	}
+	db.Wal = walIns
+	db.Memtable = memtable.New()
+
+	sstables, err := loadSstables(db.sstDir)
+	if err != nil {
+		return err
+	}
+	db.Sstables = sstables
+	db.SstablesNum = len(sstables)
+	return nil
+}
+
+func restoreSnapshotSSTables(r io.Reader, sstDir string) error {
+	tr := tar.NewReader(r)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
+
+		name := filepath.Base(header.Name)
+		if name == "." || filepath.Ext(name) != ".sst" {
+			return kv_errors.ErrInvalidPara
+		}
+		path := filepath.Join(sstDir, name)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(f, tr); err != nil {
+			_ = f.Close()
+			return err
+		}
+		if err := f.Sync(); err != nil {
+			_ = f.Close()
+			return err
+		}
+		if err := f.Close(); err != nil {
+			return err
+		}
+	}
+}
+
 func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -380,18 +527,18 @@ func (db *DB) Close() error {
 	}
 
 	if err := triggerFlush(db); err != nil {
-		infra.Logger.Error("Flush failed")
+		platform.Logger.Error("Flush failed")
 	}
 
 	for id, sst := range db.Sstables {
 		if err := sst.Close(); err != nil {
-			infra.Logger.Error("Close sst failed", "id", id)
+			platform.Logger.Error("Close sst failed", "id", id)
 			return err
 		}
 	}
 
 	if err := db.Wal.Close(); err != nil {
-		infra.Logger.Error("Close wal failed")
+		platform.Logger.Error("Close wal failed")
 		return err
 	}
 	db.closed = true

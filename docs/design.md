@@ -2,9 +2,9 @@
 
 ## 1. 项目目标
 
-`kv-store-demo` 是一个使用 Go 实现的单机 KV 存储引擎学习 Demo。
+`kv-store-demo` 是一个使用 Go 实现的 KV 存储系统学习 Demo。
 
-项目目标是帮助理解 LSM Tree 的核心流程，而不是实现一个生产级数据库。第一版希望用尽量少的工程复杂度，把以下能力串起来：
+项目第一阶段目标是帮助理解 LSM Tree 的核心流程，而不是实现一个生产级数据库。第一版已经用尽量少的工程复杂度，把以下能力串起来：
 
 - 支持 `Put` / `Get` / `Delete`
 - 支持 WAL 预写日志
@@ -14,22 +14,29 @@
 - 支持 Open 后恢复数据
 - 通过 `example` 展示 API 使用方式
 
+第二阶段开始进入 v2 分布式演进，目标是在保留单机 LSM 引擎边界的前提下，逐步学习：
+
+- gRPC 服务化
+- Raft 复制一致性
+- 一致性哈希分片
+- shard group 和路由
+
+分布式设计详见 `docs/distributed.md`。本文继续作为单机 LSM 引擎设计文档。
+
 ## 2. 非目标
 
-第一版不追求以下能力：
+单机引擎第一版不追求以下能力：
 
-- 分布式
 - 事务
 - 后台线程
 - Bloom Filter
 - Block Cache
 - 多层 Level Compaction
 - Manifest 元数据文件
-- 网络服务
 - 高并发优化
 - 生产级可靠性
 
-这些能力都可以作为后续扩展方向，但不进入第一版实现范围。
+这些能力都可以作为后续扩展方向，但不进入单机引擎第一版实现范围。v2 分布式演进会引入网络服务、Raft 和分片，但仍不追求生产级可靠性、自动扩缩容和复杂事务。
 
 ## 3. LSM Tree 核心思路
 
@@ -183,27 +190,40 @@ Compaction 后，旧版本数据会被清理，SSTable 数量会减少。
 第一版主要文件：
 
 - `options.go`：配置项
-- `infra/kv_errors/errors.go`：公共错误
+- `errors.go`：对外错误别名
+- `internal/platform/kv_errors/errors.go`：内部错误定义
 - `db.go`：对外 API 和整体协调
-- `internal/record/record.go`：记录类型和编码/解码
-- `internal/memtable/memtable.go`：内存表
-- `internal/wal/wal.go`：预写日志
-- `internal/sstable/sstable.go`：有序不可变文件
-- `internal/compact/compact.go`：SSTable 合并
+- `internal/engine/record/record.go`：记录类型和编码/解码
+- `internal/engine/memtable/memtable.go`：内存表
+- `internal/engine/wal/wal.go`：预写日志
+- `internal/engine/sstable/sstable.go`：有序不可变文件
+- `internal/engine/compact/compact.go`：SSTable 合并
 - `test/db_test.go`：API 形状测试
 - `example/simple_example.go`：API 使用示例
+
+v2 分布式演进建议新增目录：
+
+- `api/kv/v1/`：gRPC proto 定义。
+- `gen/kv/v1/`：protobuf / gRPC 生成代码。
+- `cmd/kv-node/`：KV 节点服务启动入口。
+- `internal/server/grpc/`：gRPC server，负责把 RPC 请求适配到内部服务。
+- `internal/client/`：示例和测试使用的轻量客户端封装。
+- `internal/raft/`：HashiCorp Raft 接入层和 FSM。
+- `internal/shard/`：一致性哈希、shard 元数据和路由。
+
+这些目录按阶段创建，不提前放空壳。
 
 ## 7. 实现顺序
 
 推荐实现顺序：
 
 ```text
-1. internal/record/record.go
-2. internal/memtable/memtable.go
-3. internal/wal/wal.go
-4. internal/sstable/sstable.go
+1. internal/engine/record/record.go
+2. internal/engine/memtable/memtable.go
+3. internal/engine/wal/wal.go
+4. internal/engine/sstable/sstable.go
 5. db.go
-6. internal/compact/compact.go
+6. internal/engine/compact/compact.go
 7. example/simple_example.go
 ```
 
@@ -215,11 +235,11 @@ Compaction 后，旧版本数据会被清理，SSTable 数量会减少。
 
 模块单元测试跟随对应包放置，例如：
 
-- `internal/record/record_test.go`
-- `internal/memtable/memtable_test.go`
-- `internal/wal/wal_test.go`
-- `internal/sstable/sstable_test.go`
-- `internal/compact/compact_test.go`
+- `internal/engine/record/record_test.go`
+- `internal/engine/memtable/memtable_test.go`
+- `internal/engine/wal/wal_test.go`
+- `internal/engine/sstable/sstable_test.go`
+- `internal/engine/compact/compact_test.go`
 
 `test/` 目录只放外部 API / 集成测试，例如：
 
